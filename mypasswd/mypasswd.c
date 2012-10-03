@@ -24,8 +24,8 @@ enum {
 };
 
 /*  Background color for entry (red, green ,blue) */
-static gint col_valid[]   = { 32768, 65535, 32768 };
-static gint col_invalid[] = { 65535, 32768, 32768 };
+static gint col_valid[]   = { 128, 255, 128 };
+static gint col_invalid[] = { 255, 128, 128 };
 
 /*  Configuration for password entry  */
 #define ENTRY_WIDTH             20
@@ -41,31 +41,7 @@ static void my_passwd_init (MyPasswd *);
 static gboolean my_passwd_key_released(GtkWidget*, GdkEventKey*, gpointer);
 
 
-
-GType
-my_passwd_get_type (void) {
-    static GType entry_type = 0;
-
-    if (!entry_type) {
-        static const GTypeInfo entry_info = {
-            sizeof (MyPasswdClass), 
-            NULL,
-            NULL,
-            (GClassInitFunc) my_passwd_class_init,
-            NULL,
-            NULL,
-            sizeof (MyPasswd),
-            0, 
-            (GInstanceInitFunc) my_passwd_init,
-        };
-
-        entry_type = g_type_register_static (GTK_TYPE_ENTRY, "MyPasswd",
-                                             &entry_info, 0);
-    }
-
-    return entry_type;
-}
-
+G_DEFINE_TYPE(MyPasswd, my_passwd, GTK_TYPE_ENTRY); 
 
 static void 
 my_passwd_get_property (GObject    *object, 
@@ -160,29 +136,49 @@ my_passwd_init(MyPasswd *passwd)
 }
 
 
+
 static gboolean
 my_passwd_key_released(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
     MyPasswd *passwd = MY_PASSWD(widget);
     MyPasswdPrivate *priv = MY_PASSWD_GET_PRIVATE(passwd);
-    GdkColor color;
+    int red, green, blue;
+    GtkCssProvider *provider;
+    GdkDisplay *display;
+    GdkScreen *screen;
+    char css[256];
 
     const gchar *text = gtk_entry_get_text(GTK_ENTRY(passwd));
     int len = strlen(text);
 
     if (priv->len_min <= len && len <= priv->len_max) {
         g_printf("Valid: %s\n", text);
-        color.red   = col_valid[0];
-        color.green = col_valid[1];
-        color.blue  = col_valid[2];
+        red   = col_valid[0];
+        green = col_valid[1];
+        blue  = col_valid[2];
     } else {
         g_printf("Invalid: %s\n", text);
-        color.red   = col_invalid[0];
-        color.green = col_invalid[1];
-        color.blue  = col_invalid[2];
+        red   = col_invalid[0];
+        green = col_invalid[1];
+        blue  = col_invalid[2];
     }
 
-    gtk_widget_modify_base(widget, GTK_WIDGET_STATE(widget), &color);
+    provider = gtk_css_provider_new();
+    display  = gdk_display_get_default();
+    screen   = gdk_display_get_default_screen(display);
+
+    gtk_style_context_add_provider_for_screen(screen, GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+    //  GtkEntry に背景色を設定する場合、
+    //  background-color では挙動がおかしくなる。
+    //   (inactiveのときのみ色が変わる)
+    //  background を使うと想定どおりの結果となる。
+    snprintf(css, 255, 
+        "MyPasswd {\n  background: rgb(%d, %d, %d);\n}\n", 
+        red, green, blue );
+    gtk_css_provider_load_from_data(GTK_CSS_PROVIDER(provider), css, -1, NULL);
+
+    g_object_unref(provider);
     
     return TRUE;
 }
